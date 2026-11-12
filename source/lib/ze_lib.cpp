@@ -1,6 +1,6 @@
 /*
  *
- * Copyright (C) 2019-2025 Intel Corporation
+ * Copyright (C) 2019-2026 Intel Corporation
  *
  * SPDX-License-Identifier: MIT
  *
@@ -8,6 +8,7 @@
  *
  */
 #include "ze_lib.h"
+#include "ze_tracing_compat.h"
 #include "../loader/ze_loader_api.h"
 #include "../loader/ze_loader_internal.h"
 #include <thread>
@@ -150,9 +151,13 @@ namespace ze_lib
         }
 
         ze_api_version_t current_api_version = version;
+        zel_version_t loaderVersion = {};
+        bool loaderVersionFound = false;
         const std::string loader_name = "loader";
         for (auto &component : versions) {
             if (loader_name == component.component_name) {
+                loaderVersion = component.component_lib_version;
+                loaderVersionFound = true;
                 version = component.spec_version;
                 std::string message = "ze_lib Context Init() Static Loader Found Loader Version v" + std::to_string(component.component_lib_version.major) + "." + std::to_string(component.component_lib_version.minor) + "." + std::to_string(component.component_lib_version.patch);
                 debug_trace_message(message, "");
@@ -184,13 +189,13 @@ namespace ze_lib
             return ZE_RESULT_ERROR_UNINITIALIZED;
         }
         tracing_lib = getTracing();
-        typedef ze_result_t (ZE_APICALL *zelLoaderZeTracingLayerInit_t)(std::atomic<ze_dditable_t *> &zeDdiTable);
-        auto loaderZeTracingLayerInit = reinterpret_cast<zelLoaderZeTracingLayerInit_t>(
-                GET_FUNCTION_PTR(loader, "zelLoaderTracingLayerInit") );
-        if (loaderZeTracingLayerInit == nullptr) {
-            std::string message = "ze_lib Context Init() zelLoaderTracingLayerInit missing, disabling dynamic tracer support ";
+        auto loaderZeTracingLayerInit =
+                GET_FUNCTION_PTR(loader, "zelLoaderTracingLayerInit");
+        if (loaderZeTracingLayerInit == nullptr || !loaderVersionFound) {
+            std::string message = "ze_lib Context Init() tracing initialization ABI unavailable, disabling dynamic tracer support ";
             debug_trace_message(message, "");
             this->dynamicTracingSupported = false;
+            loaderZeTracingLayerInit = nullptr;
         }
         typedef ze_result_t (ZE_APICALL *zelLoaderZerTracingLayerInit_t)(std::atomic<zer_dditable_t *> &zerDdiTable);
         auto loaderZerTracingLayerInit = reinterpret_cast<zelLoaderZerTracingLayerInit_t>(
@@ -296,7 +301,9 @@ namespace ze_lib
         {
             #ifdef L0_STATIC_LOADER_BUILD
             if (loaderZeTracingLayerInit) {
-                result = loaderZeTracingLayerInit(this->pTracingZeDdiTable);
+                result = initializeTracingTable(loaderZeTracingLayerInit,
+                                                loaderVersion,
+                                                this->pTracingZeDdiTable);
                 if (result == ZE_RESULT_SUCCESS && loaderZerTracingLayerInit) {
                     result = loaderZerTracingLayerInit(this->pTracingZerDdiTable);
                 }

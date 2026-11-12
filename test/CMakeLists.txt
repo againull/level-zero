@@ -86,6 +86,14 @@ if(BUILD_STATIC)
   endif()
 endif()
 
+if(BUILD_STATIC)
+  add_executable(static_tracing_compat_tests static_tracing_compat_tests.cpp)
+  target_include_directories(static_tracing_compat_tests PRIVATE
+    ${PROJECT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR})
+  target_link_libraries(static_tracing_compat_tests PRIVATE GTest::gtest_main)
+  add_test(NAME tests_static_tracing_compat COMMAND static_tracing_compat_tests)
+endif()
+
 # Create fake driver copies for init_driver_unit_tests
 if(NOT BUILD_STATIC)
   if(MSVC)
